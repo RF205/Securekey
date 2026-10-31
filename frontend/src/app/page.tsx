@@ -11,7 +11,9 @@ export default function Home() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleLogin = async () => {
+  // A <form> lets the user press Enter to log in; preventDefault stops a page reload.
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
       await signIn({ username: email, password });
       window.location.href = '/dashboard';
@@ -21,12 +23,15 @@ export default function Home() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh' }}>
-      <h1>SecureKey</h1>
-      <input placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} style={{ margin: 8, padding: 8, width: 280 }} />
-      <input placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} style={{ margin: 8, padding: 8, width: 280 }} />
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      <button onClick={handleLogin} style={{ margin: 8, padding: '8px 24px' }}>Login</button>
-    </div>
+    <main className="center">
+      <form className="card login" onSubmit={handleLogin}>
+        <h1>SecureKey</h1>
+        <p className="muted">Sign in to manage your API keys</p>
+        <input className="input" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} />
+        <input className="input" placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
+        {error && <p className="error">{error}</p>}
+        <button className="btn" type="submit">Log in</button>
+      </form>
+    </main>
   );
 }
