@@ -17,6 +17,30 @@ type KeyItem = {
   status: 'active' | 'retired';
 };
 
+type Filter = 'all' | 'active' | 'retired';
+
+// Turns an ISO date into friendly text like "2 hours ago", using the browser's
+// built-in Intl.RelativeTimeFormat (no library needed).
+const relativeFormatter = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 60 * 60 * 24 * 365],
+  ['month', 60 * 60 * 24 * 30],
+  ['day', 60 * 60 * 24],
+  ['hour', 60 * 60],
+  ['minute', 60],
+];
+
+function timeAgo(iso: string): string {
+  const secondsAgo = (Date.now() - new Date(iso).getTime()) / 1000;
+  // Pick the biggest unit that fits, e.g. 7200 seconds -> "2 hours ago".
+  for (const [unit, seconds] of UNITS) {
+    if (secondsAgo >= seconds) {
+      return relativeFormatter.format(-Math.floor(secondsAgo / seconds), unit);
+    }
+  }
+  return 'just now';
+}
+
 // Gets the logged-in user's Cognito ID token, or null if not logged in.
 // API Gateway's Cognito authorizer checks this token on every request.
 async function getToken(): Promise<string | null> {
@@ -46,6 +70,17 @@ export default function Dashboard() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
+
+  // Counts for the summary line and tabs, worked out from the loaded list.
+  const activeCount = keys.filter(k => k.status === 'active').length;
+  const retiredCount = keys.length - activeCount;
+  const visibleKeys = filter === 'all' ? keys : keys.filter(k => k.status === filter);
+  const tabs: { id: Filter; label: string; count: number }[] = [
+    { id: 'all', label: 'All', count: keys.length },
+    { id: 'active', label: 'Active', count: activeCount },
+    { id: 'retired', label: 'Retired', count: retiredCount },
+  ];
 
   // Load the user's keys from the API.
   const loadKeys = async () => {
@@ -109,7 +144,13 @@ export default function Dashboard() {
   return (
     <main className="container">
       <header className="header">
-        <h1>SecureKey</h1>
+        <div>
+          <h1>SecureKey</h1>
+          {/* Summary line, e.g. "3 active · 1 retired" */}
+          {!loading && (
+            <p className="muted summary">{activeCount} active · {retiredCount} retired</p>
+          )}
+        </div>
         <button className="btn btn-secondary" onClick={handleSignOut}>Sign out</button>
       </header>
 
@@ -146,11 +187,29 @@ export default function Dashboard() {
 
       {/* List of the user's keys */}
       <section className="card">
-        <h2>Your keys</h2>
+        <div className="section-head">
+          <h2>Your keys</h2>
+          {/* Filter tabs: only change what's shown, no extra API calls */}
+          <div className="tabs" role="tablist">
+            {tabs.map(tab => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={filter === tab.id}
+                className={`tab ${filter === tab.id ? 'tab-active' : ''}`}
+                onClick={() => setFilter(tab.id)}
+              >
+                {tab.label} <span className="tab-count">{tab.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
         {loading ? (
           <p className="muted">Loading...</p>
         ) : keys.length === 0 ? (
           <p className="muted">No keys yet. Generate one above.</p>
+        ) : visibleKeys.length === 0 ? (
+          <p className="muted">No {filter} keys.</p>
         ) : (
           <div className="table-wrap">
             <table>
@@ -163,10 +222,15 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {keys.map(key => (
+                {visibleKeys.map(key => (
                   <tr key={key.keyID}>
-                    <td>{key.label || <span className="muted">(no label)</span>}</td>
-                    <td>{new Date(key.createdAt).toLocaleString()}</td>
+                    <td className="label-cell">{key.label || <span className="muted">(no label)</span>}</td>
+                    {/* Friendly date; hovering shows the exact time via the title attribute */}
+                    <td>
+                      <time dateTime={key.createdAt} title={new Date(key.createdAt).toLocaleString()}>
+                        {timeAgo(key.createdAt)}
+                      </time>
+                    </td>
                     <td><span className={`badge badge-${key.status}`}>{key.status}</span></td>
                     <td className="actions">
                       {key.status === 'active' && (
